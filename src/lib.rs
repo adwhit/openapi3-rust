@@ -21,6 +21,7 @@ mod errors {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct OpenApi {
     pub openapi: String,
     pub info: Info,
@@ -45,6 +46,7 @@ impl OpenApi {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Info {
     pub title: String,
     pub description: Option<String>,
@@ -56,6 +58,7 @@ pub struct Info {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Contact {
     pub name: Option<String>,
     pub url: Option<String>,
@@ -63,12 +66,14 @@ pub struct Contact {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct License {
     pub name: String,
     pub url: Option<String>
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Server {
     pub url: String,
     pub description: Option<String>,
@@ -76,6 +81,7 @@ pub struct Server {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ServerVariable {
     #[serde(rename = "enum")]
     pub enum_: Vec<String>,
@@ -84,6 +90,7 @@ pub struct ServerVariable {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Tag {
     pub name: String,
     pub description: Option<String>,
@@ -92,6 +99,7 @@ pub struct Tag {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Path {
     #[serde(rename = "$ref")]
     pub ref_: Option<String>,
@@ -110,6 +118,7 @@ pub struct Path {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Operation {
     pub tags: Option<Vec<String>>,
     pub summary: Option<String>,
@@ -136,6 +145,7 @@ pub enum RequestBodyOrRef {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RequestBody {
     pub description: Option<String>,
     pub content: BTreeMap<String, MediaType>,
@@ -150,6 +160,7 @@ pub enum ParameterOrRef {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Parameter {
     name: String,
     #[serde(rename = "in")]
@@ -159,6 +170,9 @@ pub struct Parameter {
     deprecated: Option<bool>,
     #[serde(rename = "allowEmptyValue")]
     allow_empty_value: Option<bool>,
+    style: Option<String>,
+    explode: Option<bool>,
+    schema: SchemaOrRef
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -169,6 +183,7 @@ pub enum ResponseOrRef {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Response {
     pub description: String,
     pub headers: Option<BTreeMap<String, HeaderOrRef>>,
@@ -177,6 +192,7 @@ pub struct Response {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct MediaType {
     pub schema: Option<SchemaOrRef>,
     pub example: Option<YamlValue>,
@@ -191,14 +207,18 @@ pub enum SchemaOrRef {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Schema {
     pub required: Option<Vec<String>>,
+    #[serde(rename = "type")]
     pub type_: Option<String>,
     pub format: Option<String>,
-    pub properties: Option<BTreeMap<String, Box<Schema>>>
+    pub properties: Option<BTreeMap<String, Box<SchemaOrRef>>>,
+    pub items: Option<Box<SchemaOrRef>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Ref {
     #[serde(rename = "$ref")]
     ref_: String
