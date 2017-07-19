@@ -27,7 +27,7 @@ pub struct OpenApi {
     pub servers: Option<Vec<Server>>,
     pub paths: BTreeMap<String, Path>,
     pub components: Option<Components>,
-    pub security: Option<Security>,
+    pub security: Option<SecurityRequirement>,
     pub tags: Option<Tag>,
     #[serde(rename = "externalDocs")]
     pub external_docs: Option<ExternalDocs>
@@ -106,14 +106,126 @@ pub struct Path {
     pub patch: Option<Operation>,
     pub trace: Option<Operation>,
     pub servers: Option<Vec<Server>>,
-    pub parameters: Option<Vec<ParamOrRef>>
+    pub parameters: Option<Vec<ParameterOrRef>>
 }
 
-type Operation = YamlValue;
-type ParamOrRef = YamlValue;
-type Security = YamlValue;
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Operation {
+    pub tags: Option<Vec<String>>,
+    pub summary: Option<String>,
+    pub description: Option<String>,
+    #[serde(rename = "externalDocs")]
+    pub external_docs: Option<ExternalDocs>,
+    #[serde(rename = "operationId")]
+    pub operation_id: Option<String>,
+    pub parameters: Option<Vec<ParameterOrRef>>,
+    #[serde(rename = "requestBody")]
+    pub request_body: Option<RequestBodyOrRef>,
+    pub responses: BTreeMap<String, ResponseOrRef>,
+    pub callbacks: Option<BTreeMap<String, CallbackOrRef>>,
+    pub deprecated: Option<bool>,
+    pub security: Option<Vec<SecurityRequirement>>,
+    pub servers: Option<Vec<Server>>
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum RequestBodyOrRef {
+    RequestBody(RequestBody),
+    Ref(Ref)
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RequestBody {
+    pub description: Option<String>,
+    pub content: BTreeMap<String, MediaType>,
+    pub required: Option<bool>
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum ParameterOrRef {
+    Parameter(Parameter),
+    Ref(Ref)
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Parameter {
+    name: String,
+    #[serde(rename = "in")]
+    in_: String,
+    description: Option<String>,
+    required: Option<bool>,
+    deprecated: Option<bool>,
+    #[serde(rename = "allowEmptyValue")]
+    allow_empty_value: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum ResponseOrRef {
+    Response(Response),
+    Ref(Ref)
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Response {
+    pub description: String,
+    pub headers: Option<BTreeMap<String, HeaderOrRef>>,
+    pub content: Option<BTreeMap<String, MediaType>>,
+    pub links: Option<BTreeMap<String, LinkOrRef>>
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MediaType {
+    pub schema: Option<SchemaOrRef>,
+    pub example: Option<YamlValue>,
+    pub examples: Option<BTreeMap<String, ExampleOrRef>>
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum SchemaOrRef {
+    Schema(Schema),
+    Ref(Ref)
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Schema {
+    pub required: Option<Vec<String>>,
+    pub type_: Option<String>,
+    pub format: Option<String>,
+    pub properties: Option<BTreeMap<String, Box<Schema>>>
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Ref {
+    #[serde(rename = "$ref")]
+    ref_: String
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Components {
+    schemas: Option<BTreeMap<String, SchemaOrRef>>,
+    responses: Option<BTreeMap<String, ResponseOrRef>>,
+    parameters: Option<BTreeMap<String, ParameterOrRef>>,
+    examples: Option<BTreeMap<String, ExampleOrRef>>,
+    #[serde(rename = "requestBodies")]
+    request_bodies: Option<BTreeMap<String, RequestBodyOrRef>>,
+    headers: Option<BTreeMap<String, HeaderOrRef>>,
+    #[serde(rename = "securitySchemes")]
+    security_schemes: Option<BTreeMap<String, SecuritySchemeOrRef>>,
+    links: Option<BTreeMap<String, LinkOrRef>>,
+    callbacks: Option<BTreeMap<String, CallbackOrRef>>,
+}
+
+type SecuritySchemeOrRef = YamlValue;
+type ExampleOrRef = YamlValue;
+type HeaderOrRef = YamlValue;
+type LinkOrRef = YamlValue;
+type CallbackOrRef = YamlValue;
+type SecurityRequirement = YamlValue;
 type ExternalDocs = YamlValue;
-type Components = YamlValue;
 
 #[cfg(test)]
 mod tests {
