@@ -49,8 +49,10 @@ impl<T> MaybeRef<T> {
                         let (_, name) = r.ref_.split_at(loc + 1);
                         match map.get(name) {
                             Some(&MaybeRef::Concrete(ref inner)) => Ok(inner),
-                            Some(&MaybeRef::Ref(ref ref_)) => bail!("Recursive reference {}", ref_.ref_),
-                            None => bail!("Reference {} not found", name)
+                            Some(&MaybeRef::Ref(ref ref_)) => {
+                                bail!("Recursive reference {}", ref_.ref_)
+                            }
+                            None => bail!("Reference {} not found", name),
                         }
                     }
                 }
@@ -61,7 +63,7 @@ impl<T> MaybeRef<T> {
     pub fn as_result(&self) -> Result<&T> {
         match *self {
             MaybeRef::Concrete(ref t) => Ok(t),
-            _ => bail!("MaybeRef not concrete")
+            _ => bail!("MaybeRef not concrete"),
         }
     }
 }

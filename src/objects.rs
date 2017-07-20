@@ -1,5 +1,5 @@
 pub use serde_yaml::Value as YamlValue;
-use ::{MaybeRef, Map, MapMaybeRef};
+use {MaybeRef, Map, MapMaybeRef};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

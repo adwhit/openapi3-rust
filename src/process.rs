@@ -1,4 +1,4 @@
-use ::{Map, MapMaybeRef, OpenApi, Result};
+use {Map, MapMaybeRef, OpenApi, Result};
 use objects::{Operation, Components, Location, Type, Format, Schema, Path};
 use errors::ErrorKind;
 use regex::Regex;
@@ -9,81 +9,108 @@ pub struct Entrypoint {
     pub route: String,
     pub method: Method,
     pub args: Vec<Arg>,
-    pub response: Response,
-    pub operation_id: String
+    pub responses: Vec<Response>,
+    pub operation_id: String,
 }
 
-fn build_entrypoint(route: String, method: Method,
-                    operation: &Operation, components: &Components) -> Result<Entrypoint> {
+fn build_entrypoint(route: String,
+                    method: Method,
+                    operation: &Operation,
+                    components: &Components)
+                    -> Result<Entrypoint> {
     let route_args = extract_route_args(&route);
     let args = build_args(operation, components)?;
-    let response = build_responses(operation, components)?;
-    let operation_id = operation.operation_id.as_ref()
+    let responses = build_responses(operation, components);
+    let responses = responses.into_iter().filter_map(|res| {
+        match res {
+            Ok(resp) => Some(resp),
+            Err(e) => {
+                eprintln!("{}", e);
+                None
+            }
+        }
+    }).collect();
+    let operation_id = operation
+        .operation_id
+        .as_ref()
         .ok_or(ErrorKind::from("No operation_id found"))?;
-    Ok(Entrypoint::new(route, method, args, response, operation_id.clone()))
+    Ok(Entrypoint::new(route, method, args, responses, operation_id.clone()))
 }
 
-fn build_responses(operation: &Operation, components: &Components) -> Result<Response> {
-    operation.responses.get("200")
-        .ok_or(ErrorKind::from("200 not found").into())
-        .and_then(|maybe| {
+fn build_responses(operation: &Operation, components: &Components) -> Vec<Result<Response>> {
+    operation
+        .responses
+        .iter()
+        .map(|(code, maybe)| {
             match components.responses {
-                Some(ref resp_ref) => maybe.resolve_ref(resp_ref),
-                None => maybe.as_result()
-            }
+                    Some(ref resp_ref) => maybe.resolve_ref(resp_ref),
+                    None => maybe.as_result(),
+                }
+                .and_then(|response_obj| {
+                              response_obj
+                                  .content
+                                  .as_ref()
+                                  .ok_or("Response content not found".into())
+                          })
+                .and_then(|content_map| {
+                              content_map
+                                  .iter()
+                                  .next()
+                                  .ok_or("Content map empty".into())
+                          })
+                .and_then(|(content_type, media)| {
+                              media
+                                  .schema
+                                  .as_ref()
+                                  .ok_or("Media schema not found".into())
+                          })
+                .and_then(|maybe| match components.schemas {
+                              Some(ref schema_ref) => maybe.resolve_ref(schema_ref),
+                              None => maybe.as_result(),
+                          })
+                .and_then(NativeType::from_schema)
+                .map(|typ| Response::new(code.clone(), Some(typ)))
         })
-        .and_then(|response_obj| response_obj.content.as_ref()
-                  .ok_or(ErrorKind::from("Content not found").into()))
-        .and_then(|content_map| content_map.iter().next()
-                  .ok_or(ErrorKind::from("Content map empty").into()))
-        .and_then(|(content_type, media)| media.schema.as_ref()
-                  .ok_or(ErrorKind::from("Media schema not found").into()))
-        .and_then(|maybe| {
-            match components.schemas {
-                Some(ref schema_ref) => maybe.resolve_ref(schema_ref),
-                None => maybe.as_result()
-            }
-        })
-        .and_then(|schema| {
-            NativeType::from_schema(schema)
-                .ok_or(ErrorKind::from("Media object not resolved").into())
-        })
-        .map(|typ| Response::new(Some(typ)))
+        .collect()
 }
 
 fn build_args(operation: &Operation, components: &Components) -> Result<Vec<Arg>> {
     let op_parameters = match operation.parameters.as_ref() {
         Some(p) => p,
-        None => return Ok(Vec::new())
+        None => return Ok(Vec::new()),
     };
     let mut param_refs = &Default::default();
     param_refs = components.parameters.as_ref().unwrap_or(&param_refs);
-    op_parameters.iter()
-        .map(|maybe| maybe.resolve_ref(param_refs)
-             .and_then(|parameter| {
-                 match components.schemas {
-                     Some(ref schema_ref) => parameter.schema.resolve_ref(schema_ref),
-                     None => parameter.schema.as_result()
-                 }
-                 .and_then(|schema| NativeType::from_schema(schema)
-                           .ok_or(ErrorKind::from("Type not found").into()))
-                     .map(|native_type| {
-                         Arg::new(parameter.name.clone(), native_type, parameter.in_)
-                     })
-             })
-        ).collect()
+    op_parameters
+        .iter()
+        .map(|maybe| {
+            maybe
+                .resolve_ref(param_refs)
+                .and_then(|parameter| {
+                    match components.schemas {
+                            Some(ref schema_ref) => parameter.schema.resolve_ref(schema_ref),
+                            None => parameter.schema.as_result(),
+                        }
+                        .and_then(NativeType::from_schema)
+                        .map(|native_type| {
+                                 Arg::new(parameter.name.clone(), native_type, parameter.in_)
+                             })
+                })
+        })
+        .collect()
 }
 
 #[derive(Debug, Clone, new)]
 pub struct Arg {
     pub name: String,
     pub type_: NativeType,
-    pub location: Location
+    pub location: Location,
 }
 
 #[derive(Debug, Default, Clone, new)]
 pub struct Response {
-    pub type_: Option<NativeType>
+    pub code: String,
+    pub type_: Option<NativeType>,
 }
 
 #[derive(Clone, Copy, Debug, PartialOrd, Ord, PartialEq, Eq)]
@@ -92,7 +119,7 @@ pub enum Method {
     Post,
     Put,
     Patch,
-    Delete
+    Delete,
 }
 
 #[derive(Clone, Copy, Debug, PartialOrd, Ord, PartialEq, Eq)]
@@ -136,20 +163,20 @@ impl NativeType {
             Date => NativeType::Date,
             DateTime => NativeType::DateTime,
             Binary => NativeType::String,
-            Password => NativeType::String
+            Password => NativeType::String,
         }
     }
 
-    fn from_openapi_type_or_format(type_: &Option<Type>, format: &Option<Format>) -> Option<Self> {
+    fn from_openapi_type_or_format(type_: &Option<Type>, format: &Option<Format>) -> Result<Self> {
         // TODO check type and format agree
         match (*type_, *format) {
-            (None, _) => None,
-            (Some(atype), None) => Some(Self::from_openapi_type(atype)),
-            (Some(_), Some(aformat)) => Some(Self::from_openapi_format(aformat))
+            (None, _) => bail!("No type specified"),
+            (Some(atype), None) => Ok(Self::from_openapi_type(atype)),
+            (Some(_), Some(aformat)) => Ok(Self::from_openapi_format(aformat)),
         }
     }
 
-    fn from_schema(schema: &Schema) -> Option<Self> {
+    fn from_schema(schema: &Schema) -> Result<Self> {
         NativeType::from_openapi_type_or_format(&schema.type_, &schema.format)
     }
 }
@@ -185,7 +212,7 @@ pub fn flatten(spec: &OpenApi) -> Vec<Entrypoint> {
         for (method, op) in path.as_map() {
             match build_entrypoint(route.clone(), method, op, components) {
                 Ok(entrypoint) => out.push(entrypoint),
-                Err(e) => eprintln!("{}", e)
+                Err(e) => eprintln!("{}", e),
             }
         }
     }
@@ -194,12 +221,10 @@ pub fn flatten(spec: &OpenApi) -> Vec<Entrypoint> {
 
 fn extract_route_args(route: &str) -> BTreeSet<String> {
     let re = Regex::new(r"^\{(.+)\}$").unwrap();
-    route.split("/")
+    route
+        .split("/")
         .filter_map(|section| re.captures(section))
-        .map(|c| c.get(1)
-             .unwrap()
-             .as_str()
-             .into())
+        .map(|c| c.get(1).unwrap().as_str().into())
         .collect()
 }
 
