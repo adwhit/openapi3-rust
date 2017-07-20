@@ -39,17 +39,18 @@ type Map<T> = BTreeMap<String, T>;
 type MapMaybeRef<T> = Map<MaybeRef<T>>;
 
 impl<T> MaybeRef<T> {
-    pub fn resolve_ref<'a>(&'a self, map: &'a MapMaybeRef<T>) -> Option<&'a T> {
+    pub fn resolve_ref<'a>(&'a self, map: &'a MapMaybeRef<T>) -> Result<&'a T> {
         match *self {
-            MaybeRef::Concrete(ref inner) => Some(inner),
+            MaybeRef::Concrete(ref inner) => Ok(inner),
             MaybeRef::Ref(ref r) => {
                 match r.ref_.rfind("/") {
-                    None => None,
+                    None => bail!("Reference {} is not valid path", r.ref_),
                     Some(loc) => {
-                        let (_, name) = r.ref_.split_at(loc);
+                        let (_, name) = r.ref_.split_at(loc + 1);
                         match map.get(name) {
-                            Some(&MaybeRef::Concrete(ref inner)) => Some(inner),
-                            _ => None,
+                            Some(&MaybeRef::Concrete(ref inner)) => Ok(inner),
+                            Some(&MaybeRef::Ref(ref ref_)) => bail!("Recursive reference {}", ref_.ref_),
+                            None => bail!("Reference {} not found", name)
                         }
                     }
                 }
@@ -57,10 +58,10 @@ impl<T> MaybeRef<T> {
         }
     }
 
-    pub fn as_option(&self) -> Option<&T> {
+    pub fn as_result(&self) -> Result<&T> {
         match *self {
-            MaybeRef::Concrete(ref t) => Some(t),
-            _ => None
+            MaybeRef::Concrete(ref t) => Ok(t),
+            _ => bail!("MaybeRef not concrete")
         }
     }
 }

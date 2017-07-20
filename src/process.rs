@@ -25,53 +25,53 @@ fn build_entrypoint(route: String, method: Method,
 
 fn build_responses(operation: &Operation, components: &Components) -> Result<Response> {
     operation.responses.get("200")
-        .ok_or(ErrorKind::from("200 not found"))
+        .ok_or(ErrorKind::from("200 not found").into())
         .and_then(|maybe| {
             match components.responses {
                 Some(ref resp_ref) => maybe.resolve_ref(resp_ref),
-                None => maybe.as_option()
-            }.ok_or(ErrorKind::from("Response object not resolved"))
+                None => maybe.as_result()
+            }
         })
         .and_then(|response_obj| response_obj.content.as_ref()
-                  .ok_or(ErrorKind::from("Content not found")))
+                  .ok_or(ErrorKind::from("Content not found").into()))
         .and_then(|content_map| content_map.iter().next()
-                  .ok_or(ErrorKind::from("Content map empty")))
+                  .ok_or(ErrorKind::from("Content map empty").into()))
         .and_then(|(content_type, media)| media.schema.as_ref()
-                  .ok_or(ErrorKind::from("Media schema not found")))
+                  .ok_or(ErrorKind::from("Media schema not found").into()))
         .and_then(|maybe| {
             match components.schemas {
                 Some(ref schema_ref) => maybe.resolve_ref(schema_ref),
-                None => maybe.as_option()
-            }.ok_or(ErrorKind::from("Media object not resolved"))
+                None => maybe.as_result()
+            }
         })
         .and_then(|schema| {
             NativeType::from_schema(schema)
-                .ok_or(ErrorKind::from("Media object not resolved"))
+                .ok_or(ErrorKind::from("Media object not resolved").into())
         })
         .map(|typ| Response::new(Some(typ)))
-        .map_err(|e| e.into())
 }
 
 fn build_args(operation: &Operation, components: &Components) -> Result<Vec<Arg>> {
+    let op_parameters = match operation.parameters.as_ref() {
+        Some(p) => p,
+        None => return Ok(Vec::new())
+    };
     let mut param_refs = &Default::default();
     param_refs = components.parameters.as_ref().unwrap_or(&param_refs);
-    let args = operation.parameters.as_ref().map(|params| {
-        params.iter()
-            .filter_map(|maybe| maybe.resolve_ref(param_refs))
-            .filter_map(|parameter| {
-                // TODO is there a neater way to do this to get rid of dummy struct?
-                let dummy_schema_ref = &Default::default();
-                parameter.schema
-                    .resolve_ref(components.schemas.as_ref().unwrap_or(dummy_schema_ref))
-                    .and_then(NativeType::from_schema)
-                    .map(|native_type| {
-                        Arg::new(parameter.name.clone(),
-                                 native_type,
-                                 parameter.in_)
-                    })
-            }).collect()
-    }).unwrap_or(Vec::new());
-    Ok(args)
+    op_parameters.iter()
+        .map(|maybe| maybe.resolve_ref(param_refs)
+             .and_then(|parameter| {
+                 match components.schemas {
+                     Some(ref schema_ref) => parameter.schema.resolve_ref(schema_ref),
+                     None => parameter.schema.as_result()
+                 }
+                 .and_then(|schema| NativeType::from_schema(schema)
+                           .ok_or(ErrorKind::from("Type not found").into()))
+                     .map(|native_type| {
+                         Arg::new(parameter.name.clone(), native_type, parameter.in_)
+                     })
+             })
+        ).collect()
 }
 
 #[derive(Debug, Clone, new)]
@@ -222,5 +222,6 @@ mod tests {
         let api = OpenApi::from_reader(file).unwrap();
         let flat = flatten(&api);
         println!("{:#?}", flat);
+        assert_eq!(flat.len(), 3);
     }
 }
