@@ -262,7 +262,6 @@ pub enum Location {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Type {
-    Null,
     Boolean,
     Object,
     Array,
@@ -310,7 +309,7 @@ mod tests {
 
     #[test]
     fn parse_petstore_expanded() {
-        let file = File::open("test_apis/petstore.yaml").unwrap();
+        let file = File::open("test_apis/petstore-expanded.yaml").unwrap();
         let api: OpenApi = match OpenApi::from_reader(file) {
             Ok(api) => api,
             Err(e) => panic!("{}", e),
