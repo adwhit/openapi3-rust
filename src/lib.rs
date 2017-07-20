@@ -20,6 +20,34 @@ pub enum MaybeRef<T> {
     Ref(Ref),
 }
 
+type MapMaybeRef<T> = BTreeMap<String, MaybeRef<T>>;
+
+trait Resolve: Sized {
+    type Inner;
+    fn resolve<'a>(&'a self, map: &'a MapMaybeRef<Self::Inner>) -> Option<&'a Self::Inner>;
+}
+
+impl<T> Resolve for MaybeRef<T> {
+    type Inner = T;
+    fn resolve<'a>(&'a self, map: &'a MapMaybeRef<Self::Inner>) -> Option<&'a Self::Inner> {
+        match *self {
+            MaybeRef::Concrete(ref inner) => Some(inner),
+            MaybeRef::Ref(ref r) => {
+                match r.ref_.rfind("/") {
+                    None => None,
+                    Some(loc) => {
+                        let (_, name) = r.ref_.split_at(loc);
+                        match map.get(name) {
+                            Some(&MaybeRef::Concrete(ref inner)) => Some(inner),
+                            _ => None,
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Ref {
@@ -218,19 +246,20 @@ pub struct Schema {
     pub properties: Option<BTreeMap<String, Box<MaybeRef<Schema>>>>,
     pub items: Option<Box<MaybeRef<Schema>>>,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Components {
-    schemas: Option<BTreeMap<String, MaybeRef<Schema>>>,
-    responses: Option<BTreeMap<String, MaybeRef<Response>>>,
-    parameters: Option<BTreeMap<String, MaybeRef<Parameter>>>,
-    examples: Option<BTreeMap<String, MaybeRef<Example>>>,
+    schemas: Option<MapMaybeRef<Schema>>,
+    responses: Option<MapMaybeRef<Response>>,
+    parameters: Option<MapMaybeRef<Parameter>>,
+    examples: Option<MapMaybeRef<Example>>,
     #[serde(rename = "requestBodies")]
-    request_bodies: Option<BTreeMap<String, MaybeRef<RequestBody>>>,
-    headers: Option<BTreeMap<String, MaybeRef<Header>>>,
+    request_bodies: Option<MapMaybeRef<RequestBody>>,
+    headers: Option<MapMaybeRef<Header>>,
     #[serde(rename = "securitySchemes")]
-    security_schemes: Option<BTreeMap<String, MaybeRef<SecurityScheme>>>,
-    links: Option<BTreeMap<String, MaybeRef<Link>>>,
-    callbacks: Option<BTreeMap<String, MaybeRef<Callback>>>,
+    security_schemes: Option<MapMaybeRef<SecurityScheme>>,
+    links: Option<MapMaybeRef<Link>>,
+    callbacks: Option<MapMaybeRef<Callback>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
