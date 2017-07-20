@@ -1,23 +1,30 @@
 #[macro_use]
-extern crate serde_derive;
-extern crate serde;
-extern crate serde_yaml;
-#[macro_use]
 extern crate error_chain;
+extern crate serde;
+#[macro_use]
+extern crate serde_derive;
+extern crate serde_yaml;
 
 use std::fs::File;
 use std::io::Read;
 use std::collections::BTreeMap;
-use std::rc::Rc;
+//TODO use std::rc::Rc;
+
 pub use serde_yaml::Value as YamlValue;
-use errors::*;
+pub use errors::*;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-enum MaybeRef<T>
-    where T: serde::Deserialize<'de>
-{
+#[serde(untagged)]
+pub enum MaybeRef<T> {
     Concrete(T),
     Ref(Ref),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Ref {
+    #[serde(rename = "$ref")]
+    ref_: String,
 }
 
 mod errors {
@@ -123,7 +130,7 @@ pub struct Path {
     pub patch: Option<Operation>,
     pub trace: Option<Operation>,
     pub servers: Option<Vec<Server>>,
-    pub parameters: Option<Vec<ParameterOrRef>>,
+    pub parameters: Option<Vec<MaybeRef<Parameter>>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -136,22 +143,15 @@ pub struct Operation {
     pub external_docs: Option<ExternalDocs>,
     #[serde(rename = "operationId")]
     pub operation_id: Option<String>,
-    pub parameters: Option<Vec<ParameterOrRef>>,
+    pub parameters: Option<Vec<MaybeRef<Parameter>>>,
     #[serde(rename = "requestBody")]
-    pub request_body: Option<RequestBodyOrRef>,
-    pub responses: BTreeMap<String, ResponseOrRef>,
-    pub callbacks: Option<BTreeMap<String, CallbackOrRef>>,
+    pub request_body: Option<MaybeRef<RequestBody>>,
+    pub responses: BTreeMap<String, MaybeRef<Response>>,
+    pub callbacks: Option<BTreeMap<String, MaybeRef<Callback>>>,
     #[serde(default)]
     pub deprecated: bool,
     pub security: Option<Vec<SecurityRequirement>>,
     pub servers: Option<Vec<Server>>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum RequestBodyOrRef {
-    RequestBody(Rc<RequestBody>),
-    Ref(Ref),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -161,13 +161,6 @@ pub struct RequestBody {
     pub content: BTreeMap<String, MediaType>,
     #[serde(default)]
     pub required: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum ParameterOrRef {
-    Parameter(Rc<Parameter>),
-    Ref(Ref),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -191,42 +184,28 @@ pub struct Parameter {
     #[serde(rename = "allowReserved")]
     #[serde(default)]
     pub allow_reserved: bool,
-    pub schema: SchemaOrRef,
+    pub schema: MaybeRef<Schema>,
     pub example: Option<YamlValue>,
-    pub examples: Option<BTreeMap<String, ExampleOrRef>>,
+    pub examples: Option<BTreeMap<String, MaybeRef<Example>>>,
 
     pub content: Option<BTreeMap<String, MediaType>>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum ResponseOrRef {
-    Response(Rc<Response>),
-    Ref(Ref),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Response {
     pub description: String,
-    pub headers: Option<BTreeMap<String, HeaderOrRef>>,
+    pub headers: Option<BTreeMap<String, MaybeRef<Header>>>,
     pub content: Option<BTreeMap<String, MediaType>>,
-    pub links: Option<BTreeMap<String, LinkOrRef>>,
+    pub links: Option<BTreeMap<String, MaybeRef<Link>>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct MediaType {
-    pub schema: Option<SchemaOrRef>,
+    pub schema: Option<MaybeRef<Schema>>,
     pub example: Option<YamlValue>,
-    pub examples: Option<BTreeMap<String, ExampleOrRef>>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum SchemaOrRef {
-    Schema(Rc<Schema>),
-    Ref(Ref),
+    pub examples: Option<BTreeMap<String, MaybeRef<Example>>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -236,37 +215,22 @@ pub struct Schema {
     #[serde(rename = "type")]
     pub type_: Option<Type>,
     pub format: Option<Format>,
-    pub properties: Option<BTreeMap<String, Box<SchemaOrRef>>>,
-    pub items: Option<Box<SchemaOrRef>>,
+    pub properties: Option<BTreeMap<String, Box<MaybeRef<Schema>>>>,
+    pub items: Option<Box<MaybeRef<Schema>>>,
 }
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Ref {
-    #[serde(rename = "$ref")]
-    ref_: String,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Components {
-    schemas: Option<BTreeMap<String, SchemaOrRef>>,
-    responses: Option<BTreeMap<String, ResponseOrRef>>,
-    parameters: Option<BTreeMap<String, ParameterOrRef>>,
-    examples: Option<BTreeMap<String, ExampleOrRef>>,
+    schemas: Option<BTreeMap<String, MaybeRef<Schema>>>,
+    responses: Option<BTreeMap<String, MaybeRef<Response>>>,
+    parameters: Option<BTreeMap<String, MaybeRef<Parameter>>>,
+    examples: Option<BTreeMap<String, MaybeRef<Example>>>,
     #[serde(rename = "requestBodies")]
-    request_bodies: Option<BTreeMap<String, RequestBodyOrRef>>,
-    headers: Option<BTreeMap<String, HeaderOrRef>>,
+    request_bodies: Option<BTreeMap<String, MaybeRef<RequestBody>>>,
+    headers: Option<BTreeMap<String, MaybeRef<Header>>>,
     #[serde(rename = "securitySchemes")]
-    security_schemes: Option<BTreeMap<String, SecuritySchemeOrRef>>,
-    links: Option<BTreeMap<String, LinkOrRef>>,
-    callbacks: Option<BTreeMap<String, CallbackOrRef>>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum ExampleOrRef {
-    Example(Rc<Example>),
-    Ref(Ref),
+    security_schemes: Option<BTreeMap<String, MaybeRef<SecurityScheme>>>,
+    links: Option<BTreeMap<String, MaybeRef<Link>>>,
+    callbacks: Option<BTreeMap<String, MaybeRef<Callback>>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -278,12 +242,13 @@ pub struct Example {
     external_value: Option<String>,
 }
 
-type SecuritySchemeOrRef = YamlValue;
-type HeaderOrRef = YamlValue;
-type LinkOrRef = YamlValue;
-type CallbackOrRef = YamlValue;
+pub type Callback = BTreeMap<String, Path>;
+
 type SecurityRequirement = YamlValue;
 type ExternalDocs = YamlValue;
+type Header = YamlValue;
+type Link = YamlValue;
+type SecurityScheme = YamlValue;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -344,8 +309,18 @@ mod tests {
     }
 
     #[test]
-    fn parse_petstore_extended() {
+    fn parse_petstore_expanded() {
         let file = File::open("test_apis/petstore.yaml").unwrap();
+        let api: OpenApi = match OpenApi::from_reader(file) {
+            Ok(api) => api,
+            Err(e) => panic!("{}", e),
+        };
+        println!("{:#?}", api)
+    }
+
+    #[test]
+    fn parse_uber() {
+        let file = File::open("test_apis/uber.yaml").unwrap();
         let api: OpenApi = match OpenApi::from_reader(file) {
             Ok(api) => api,
             Err(e) => panic!("{}", e),
