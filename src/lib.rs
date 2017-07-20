@@ -4,6 +4,7 @@ extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 extern crate serde_yaml;
+extern crate regex;
 
 use std::fs::File;
 use std::io::Read;
@@ -11,6 +12,7 @@ use std::collections::BTreeMap;
 
 pub use errors::*;
 pub use objects::*;
+pub use process::*;
 
 mod objects;
 mod process;

@@ -1,23 +1,25 @@
-use ::{Map, Type, Format, Location, OpenApi, Components};
+use ::{Map, OpenApi};
+use objects::*;
+use regex::Regex;
 
-struct Entrypoint {
-    route: String,
-    method: Method,
-    args: Vec<Arg>,
-    response: Response
+pub struct Entrypoint {
+    pub route: String,
+    pub method: Method,
+    pub args: Vec<Arg>,
+    pub response: Response
 }
 
-struct Arg {
-    name: String,
-    type_: NativeType,
-    location: Location
+pub struct Arg {
+    pub name: String,
+    pub type_: NativeType,
+    pub location: Location
 }
 
-struct Response {
+pub struct Response {
     fake: u32
 }
 
-enum Method {
+pub enum Method {
     Get,
     Post,
     Put,
@@ -25,7 +27,7 @@ enum Method {
     Delete
 }
 
-enum NativeType {
+pub enum NativeType {
     I32,
     I64,
     F32,
@@ -70,21 +72,31 @@ impl NativeType {
     }
 }
 
-fn flatten(spec: &OpenApi) -> Vec<Entrypoint> {
+pub fn flatten(spec: &OpenApi) -> Vec<Entrypoint> {
     let entrypoints = Vec::new();
     let mut components = &Default::default();
     components = spec.components.as_ref().unwrap_or(components);
-    for (route, path) in spec.paths {
+    for (route, path) in &spec.paths {
     }
     entrypoints
 }
 
-fn inspect_route(route: &str) -> (String, Vec<String>) {
+fn inspect_route(route: &str) -> Vec<String> {
+    let re = Regex::new(r"^\{(.+)\}$").unwrap();
+    route.split("/")
+        .filter_map(|section| re.captures(section))
+        .map(|c| c.get(1).unwrap().as_str().into())
+        .collect()
 }
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     #[test]
     fn test_inspect_route() {
+        let res = inspect_route("/pets/{petId}/name/{petName}/x{bogus}x");
+        assert_eq!(res.len(), 2);
+        assert_eq!(res[0], "petId");
+        assert_eq!(res[1], "petName");
     }
 }

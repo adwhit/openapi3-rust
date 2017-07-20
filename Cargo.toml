@@ -5,6 +5,10 @@ version = "0.1.0"
 
 [dependencies]
 error-chain = "0.10.0"
-serde = { version = "1.0.10", features = ["rc"] }
+regex = "0.2.2"
 serde_derive = "1.0.10"
 serde_yaml = "0.7.1"
+
+[dependencies.serde]
+features = ["rc"]
+version = "1.0.10"
