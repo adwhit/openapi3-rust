@@ -5,17 +5,19 @@ extern crate serde;
 extern crate serde_derive;
 extern crate serde_yaml;
 extern crate regex;
+#[macro_use]
+extern crate derive_new;
 
 use std::fs::File;
 use std::io::Read;
 use std::collections::BTreeMap;
 
 pub use errors::*;
-pub use objects::*;
-pub use process::*;
+use objects::*;
+pub use process::Entrypoint;
 
-mod objects;
-mod process;
+pub mod objects;
+pub mod process;
 
 mod errors {
     error_chain!{
@@ -33,8 +35,8 @@ pub enum MaybeRef<T> {
     Ref(Ref),
 }
 
-type MapMaybeRef<T> = BTreeMap<String, MaybeRef<T>>;
 type Map<T> = BTreeMap<String, T>;
+type MapMaybeRef<T> = Map<MaybeRef<T>>;
 
 impl<T> MaybeRef<T> {
     pub fn resolve_ref<'a>(&'a self, map: &'a MapMaybeRef<T>) -> Option<&'a T> {
@@ -63,7 +65,7 @@ pub struct OpenApi {
     pub openapi: String,
     pub info: Info,
     pub servers: Option<Vec<Server>>,
-    pub paths: BTreeMap<String, Path>,
+    pub paths: Map<Path>,
     pub components: Option<Components>,
     pub security: Option<SecurityRequirement>,
     pub tags: Option<Tag>,
