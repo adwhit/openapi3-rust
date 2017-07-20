@@ -9,8 +9,16 @@ use std::fs::File;
 use std::io::Read;
 use std::collections::BTreeMap;
 use std::rc::Rc;
-use serde_yaml::Value as YamlValue;
+pub use serde_yaml::Value as YamlValue;
 use errors::*;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+enum MaybeRef<T>
+    where T: serde::Deserialize<'de>
+{
+    Concrete(T),
+    Ref(Ref),
+}
 
 mod errors {
     error_chain!{
@@ -32,7 +40,7 @@ pub struct OpenApi {
     pub security: Option<SecurityRequirement>,
     pub tags: Option<Tag>,
     #[serde(rename = "externalDocs")]
-    pub external_docs: Option<ExternalDocs>
+    pub external_docs: Option<ExternalDocs>,
 }
 
 impl OpenApi {
@@ -55,7 +63,7 @@ pub struct Info {
     pub terms_of_service: Option<String>,
     pub contact: Option<Contact>,
     pub license: Option<License>,
-    pub version: String
+    pub version: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -70,7 +78,7 @@ pub struct Contact {
 #[serde(deny_unknown_fields)]
 pub struct License {
     pub name: String,
-    pub url: Option<String>
+    pub url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -78,7 +86,7 @@ pub struct License {
 pub struct Server {
     pub url: String,
     pub description: Option<String>,
-    pub variables: Option<BTreeMap<String, ServerVariable>>
+    pub variables: Option<BTreeMap<String, ServerVariable>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -87,7 +95,7 @@ pub struct ServerVariable {
     #[serde(rename = "enum")]
     pub enum_: Vec<String>,
     pub default: String,
-    pub description: Option<String>
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -96,7 +104,7 @@ pub struct Tag {
     pub name: String,
     pub description: Option<String>,
     #[serde(rename = "externalDocs")]
-    pub external_docs: Option<ExternalDocs>
+    pub external_docs: Option<ExternalDocs>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -115,7 +123,7 @@ pub struct Path {
     pub patch: Option<Operation>,
     pub trace: Option<Operation>,
     pub servers: Option<Vec<Server>>,
-    pub parameters: Option<Vec<ParameterOrRef>>
+    pub parameters: Option<Vec<ParameterOrRef>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -133,9 +141,10 @@ pub struct Operation {
     pub request_body: Option<RequestBodyOrRef>,
     pub responses: BTreeMap<String, ResponseOrRef>,
     pub callbacks: Option<BTreeMap<String, CallbackOrRef>>,
-    pub deprecated: Option<bool>,
+    #[serde(default)]
+    pub deprecated: bool,
     pub security: Option<Vec<SecurityRequirement>>,
-    pub servers: Option<Vec<Server>>
+    pub servers: Option<Vec<Server>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -150,14 +159,15 @@ pub enum RequestBodyOrRef {
 pub struct RequestBody {
     pub description: Option<String>,
     pub content: BTreeMap<String, MediaType>,
-    pub required: Option<bool>
+    #[serde(default)]
+    pub required: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ParameterOrRef {
     Parameter(Rc<Parameter>),
-    Ref(Ref)
+    Ref(Ref),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -167,20 +177,32 @@ pub struct Parameter {
     #[serde(rename = "in")]
     pub in_: Location,
     pub description: Option<String>,
-    pub required: Option<bool>,
-    pub deprecated: Option<bool>,
+    #[serde(default)]
+    pub required: bool,
+    #[serde(default)]
+    pub deprecated: bool,
     #[serde(rename = "allowEmptyValue")]
-    pub allow_empty_value: Option<bool>,
-    pub style: Option<String>,
-    pub explode: Option<bool>,
-    pub schema: SchemaOrRef
+    #[serde(default)]
+    pub allow_empty_value: bool,
+
+    pub style: Option<Style>,
+    #[serde(default)]
+    pub explode: bool,
+    #[serde(rename = "allowReserved")]
+    #[serde(default)]
+    pub allow_reserved: bool,
+    pub schema: SchemaOrRef,
+    pub example: Option<YamlValue>,
+    pub examples: Option<BTreeMap<String, ExampleOrRef>>,
+
+    pub content: Option<BTreeMap<String, MediaType>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ResponseOrRef {
     Response(Rc<Response>),
-    Ref(Ref)
+    Ref(Ref),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -189,7 +211,7 @@ pub struct Response {
     pub description: String,
     pub headers: Option<BTreeMap<String, HeaderOrRef>>,
     pub content: Option<BTreeMap<String, MediaType>>,
-    pub links: Option<BTreeMap<String, LinkOrRef>>
+    pub links: Option<BTreeMap<String, LinkOrRef>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -197,14 +219,14 @@ pub struct Response {
 pub struct MediaType {
     pub schema: Option<SchemaOrRef>,
     pub example: Option<YamlValue>,
-    pub examples: Option<BTreeMap<String, ExampleOrRef>>
+    pub examples: Option<BTreeMap<String, ExampleOrRef>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum SchemaOrRef {
     Schema(Rc<Schema>),
-    Ref(Ref)
+    Ref(Ref),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -222,7 +244,7 @@ pub struct Schema {
 #[serde(deny_unknown_fields)]
 pub struct Ref {
     #[serde(rename = "$ref")]
-    ref_: String
+    ref_: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -240,8 +262,23 @@ pub struct Components {
     callbacks: Option<BTreeMap<String, CallbackOrRef>>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum ExampleOrRef {
+    Example(Rc<Example>),
+    Ref(Ref),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Example {
+    summary: Option<String>,
+    description: Option<String>,
+    value: YamlValue,
+    #[serde(rename = "externalValue")]
+    external_value: Option<String>,
+}
+
 type SecuritySchemeOrRef = YamlValue;
-type ExampleOrRef = YamlValue;
 type HeaderOrRef = YamlValue;
 type LinkOrRef = YamlValue;
 type CallbackOrRef = YamlValue;
@@ -254,16 +291,19 @@ pub enum Location {
     Path,
     Query,
     Header,
-    Cookie
+    Cookie,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Type {
-    Integer,
+    Null,
+    Boolean,
+    Object,
+    Array,
     Number,
     String,
-    Boolean,
+    Integer,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -278,7 +318,14 @@ pub enum Format {
     Date,
     #[serde(rename = "date-time")]
     DateTime,
-    Password
+    Password,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Style {
+    Form,
+    Simple,
 }
 
 
@@ -291,7 +338,17 @@ mod tests {
         let file = File::open("test_apis/petstore.yaml").unwrap();
         let api: OpenApi = match OpenApi::from_reader(file) {
             Ok(api) => api,
-            Err(e) => panic!("{}", e)
+            Err(e) => panic!("{}", e),
+        };
+        println!("{:#?}", api)
+    }
+
+    #[test]
+    fn parse_petstore_extended() {
+        let file = File::open("test_apis/petstore.yaml").unwrap();
+        let api: OpenApi = match OpenApi::from_reader(file) {
+            Ok(api) => api,
+            Err(e) => panic!("{}", e),
         };
         println!("{:#?}", api)
     }
