@@ -56,6 +56,13 @@ impl<T> MaybeRef<T> {
             }
         }
     }
+
+    pub fn as_option(&self) -> Option<&T> {
+        match *self {
+            MaybeRef::Concrete(ref t) => Some(t),
+            _ => None
+        }
+    }
 }
 
 /// The root struct representing an OpenAPI spec
@@ -101,7 +108,7 @@ mod tests {
     #[test]
     fn parse_petstore_expanded() {
         let file = File::open("test_apis/petstore-expanded.yaml").unwrap();
-        let api: OpenApi = match OpenApi::from_reader(file) {
+        let api = match OpenApi::from_reader(file) {
             Ok(api) => api,
             Err(e) => panic!("{}", e),
         };
