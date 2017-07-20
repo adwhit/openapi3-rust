@@ -8,6 +8,7 @@ extern crate error_chain;
 use std::fs::File;
 use std::io::Read;
 use std::collections::BTreeMap;
+use std::rc::Rc;
 use serde_yaml::Value as YamlValue;
 use errors::*;
 
@@ -140,8 +141,8 @@ pub struct Operation {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum RequestBodyOrRef {
-    RequestBody(RequestBody),
-    Ref(Ref)
+    RequestBody(Rc<RequestBody>),
+    Ref(Ref),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -155,30 +156,30 @@ pub struct RequestBody {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ParameterOrRef {
-    Parameter(Parameter),
+    Parameter(Rc<Parameter>),
     Ref(Ref)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Parameter {
-    name: String,
+    pub name: String,
     #[serde(rename = "in")]
-    in_: String,
-    description: Option<String>,
-    required: Option<bool>,
-    deprecated: Option<bool>,
+    pub in_: Location,
+    pub description: Option<String>,
+    pub required: Option<bool>,
+    pub deprecated: Option<bool>,
     #[serde(rename = "allowEmptyValue")]
-    allow_empty_value: Option<bool>,
-    style: Option<String>,
-    explode: Option<bool>,
-    schema: SchemaOrRef
+    pub allow_empty_value: Option<bool>,
+    pub style: Option<String>,
+    pub explode: Option<bool>,
+    pub schema: SchemaOrRef
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ResponseOrRef {
-    Response(Response),
+    Response(Rc<Response>),
     Ref(Ref)
 }
 
@@ -202,7 +203,7 @@ pub struct MediaType {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum SchemaOrRef {
-    Schema(Schema),
+    Schema(Rc<Schema>),
     Ref(Ref)
 }
 
@@ -211,8 +212,8 @@ pub enum SchemaOrRef {
 pub struct Schema {
     pub required: Option<Vec<String>>,
     #[serde(rename = "type")]
-    pub type_: Option<String>,
-    pub format: Option<String>,
+    pub type_: Option<Type>,
+    pub format: Option<Format>,
     pub properties: Option<BTreeMap<String, Box<SchemaOrRef>>>,
     pub items: Option<Box<SchemaOrRef>>,
 }
@@ -246,6 +247,40 @@ type LinkOrRef = YamlValue;
 type CallbackOrRef = YamlValue;
 type SecurityRequirement = YamlValue;
 type ExternalDocs = YamlValue;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Location {
+    Path,
+    Query,
+    Header,
+    Cookie
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Type {
+    Integer,
+    Number,
+    String,
+    Boolean,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Format {
+    Int32,
+    Int64,
+    Float,
+    Double,
+    Byte,
+    Binary,
+    Date,
+    #[serde(rename = "date-time")]
+    DateTime,
+    Password
+}
+
 
 #[cfg(test)]
 mod tests {
