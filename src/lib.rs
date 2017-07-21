@@ -11,7 +11,7 @@ extern crate regex;
 extern crate derive_new;
 
 use std::fs::File;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::collections::BTreeMap;
 
 pub use errors::*;
@@ -26,6 +26,7 @@ mod errors {
         foreign_links {
             Io(::std::io::Error);
             Yaml(::serde_yaml::Error);
+            Json(::serde_json::Error);
         }
     }
 }
@@ -83,12 +84,17 @@ impl<T> MaybeRef<T> {
 pub struct OpenApi {
     pub openapi: String,
     pub info: Info,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub servers: Option<Vec<Server>>,
     pub paths: Map<Path>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub components: Option<Components>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub security: Option<SecurityRequirement>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub tags: Option<Tag>,
     #[serde(rename = "externalDocs")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub external_docs: Option<ExternalDocs>,
 }
 
@@ -101,6 +107,23 @@ impl OpenApi {
         let file = File::open(path)?;
         OpenApi::from_reader(file)
     }
+
+    pub fn to_yaml<W: Write>(&self, writer: W) -> Result<()> {
+        Ok(serde_yaml::to_writer(writer, &self)?)
+    }
+
+    pub fn to_yaml_string(&self) -> Result<String> {
+        Ok(serde_yaml::to_string(&self)?)
+    }
+
+    pub fn to_json<W: Write>(&self, writer: W) -> Result<()> {
+        Ok(serde_json::to_writer(writer, &self)?)
+    }
+
+    pub fn to_json_string(&self) -> Result<String> {
+        Ok(serde_json::to_string(&self)?)
+    }
+
 }
 
 #[cfg(test)]
@@ -115,6 +138,14 @@ mod tests {
             Err(e) => panic!("{}", e),
         };
         println!("{:#?}", api)
+    }
+
+    #[test]
+    fn parse_and_serialize_petstore() {
+        let file = File::open("test_apis/petstore.yaml").unwrap();
+        let api: OpenApi = OpenApi::from_reader(file).unwrap();
+        let yaml = api.to_yaml_string().unwrap();
+        println!("{}", yaml);
     }
 
     #[test]
