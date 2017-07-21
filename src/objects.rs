@@ -93,7 +93,7 @@ pub struct Operation {
     pub parameters: Option<Vec<MaybeRef<Parameter>>>,
     #[serde(rename = "requestBody")]
     pub request_body: Option<MaybeRef<RequestBody>>,
-    pub responses: MapMaybeRef<Response>,
+    pub responses: MapMaybeRef<ResponseObj>,
     pub callbacks: Option<MapMaybeRef<Callback>>,
     #[serde(default)]
     pub deprecated: bool,
@@ -140,7 +140,7 @@ pub struct Parameter {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct Response {
+pub struct ResponseObj {
     pub description: String,
     pub headers: Option<MapMaybeRef<Header>>,
     pub content: Option<Map<MediaType>>,
@@ -169,7 +169,7 @@ pub struct Schema {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Components {
     pub schemas: Option<MapMaybeRef<Schema>>,
-    pub responses: Option<MapMaybeRef<Response>>,
+    pub responses: Option<MapMaybeRef<ResponseObj>>,
     pub parameters: Option<MapMaybeRef<Parameter>>,
     pub examples: Option<MapMaybeRef<Example>>,
     #[serde(rename = "requestBodies")]

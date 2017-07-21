@@ -1,5 +1,5 @@
-use {Map, MapMaybeRef, OpenApi, Result};
-use objects::{Operation, Components, Location, Type, Format, Schema, Path};
+use {OpenApi, Result};
+use objects::*;
 use errors::ErrorKind;
 use regex::Regex;
 use std::collections::{BTreeSet, BTreeMap};
@@ -13,28 +13,35 @@ pub struct Entrypoint {
     pub operation_id: String,
 }
 
-fn build_entrypoint(route: String,
-                    method: Method,
-                    operation: &Operation,
-                    components: &Components)
-                    -> Result<Entrypoint> {
+fn build_entrypoint(
+    route: String,
+    method: Method,
+    operation: &Operation,
+    components: &Components,
+) -> Result<Entrypoint> {
     let route_args = extract_route_args(&route);
     let args = build_args(operation, components)?;
     let responses = build_responses(operation, components);
-    let responses = responses.into_iter().filter_map(|res| {
-        match res {
+    let responses = responses
+        .into_iter()
+        .filter_map(|res| match res {
             Ok(resp) => Some(resp),
             Err(e) => {
                 eprintln!("{}", e);
                 None
             }
-        }
-    }).collect();
-    let operation_id = operation
-        .operation_id
-        .as_ref()
-        .ok_or(ErrorKind::from("No operation_id found"))?;
-    Ok(Entrypoint::new(route, method, args, responses, operation_id.clone()))
+        })
+        .collect();
+    let operation_id = operation.operation_id.as_ref().ok_or(ErrorKind::from(
+        "No operation_id found",
+    ))?;
+    Ok(Entrypoint::new(
+        route,
+        method,
+        args,
+        responses,
+        operation_id.clone(),
+    ))
 }
 
 fn build_responses(operation: &Operation, components: &Components) -> Vec<Result<Response>> {
@@ -42,34 +49,31 @@ fn build_responses(operation: &Operation, components: &Components) -> Vec<Result
         .responses
         .iter()
         .map(|(code, maybe)| {
-            match components.responses {
-                    Some(ref resp_ref) => maybe.resolve_ref(resp_ref),
-                    None => maybe.as_result(),
+            let response_obj = maybe.resolve_ref_opt(&components.responses)?;
+            match response_obj.content {
+                None => return Ok(Response::new(code.clone(), None, None)), // No data returned
+                Some(ref content_map) => {
+                    content_map
+                        .iter()
+                        .next()
+                        .ok_or("Content map empty".into())
+                        .and_then(|(content_type, media)| {
+                            media
+                                .schema
+                                .as_ref()
+                                .ok_or("Media schema not found".into())
+                                .and_then(|maybe| maybe.resolve_ref_opt(&components.schemas))
+                                .and_then(NativeType::from_schema)
+                                .map(|typ| {
+                                    Response::new(
+                                        code.clone(),
+                                        Some(typ),
+                                        Some(content_type.clone()),
+                                    )
+                                })
+                        })
                 }
-                .and_then(|response_obj| {
-                              response_obj
-                                  .content
-                                  .as_ref()
-                                  .ok_or("Response content not found".into())
-                          })
-                .and_then(|content_map| {
-                              content_map
-                                  .iter()
-                                  .next()
-                                  .ok_or("Content map empty".into())
-                          })
-                .and_then(|(content_type, media)| {
-                              media
-                                  .schema
-                                  .as_ref()
-                                  .ok_or("Media schema not found".into())
-                          })
-                .and_then(|maybe| match components.schemas {
-                              Some(ref schema_ref) => maybe.resolve_ref(schema_ref),
-                              None => maybe.as_result(),
-                          })
-                .and_then(NativeType::from_schema)
-                .map(|typ| Response::new(code.clone(), Some(typ)))
+            }
         })
         .collect()
 }
@@ -79,23 +83,20 @@ fn build_args(operation: &Operation, components: &Components) -> Result<Vec<Arg>
         Some(p) => p,
         None => return Ok(Vec::new()),
     };
-    let mut param_refs = &Default::default();
-    param_refs = components.parameters.as_ref().unwrap_or(&param_refs);
     op_parameters
         .iter()
         .map(|maybe| {
-            maybe
-                .resolve_ref(param_refs)
-                .and_then(|parameter| {
-                    match components.schemas {
-                            Some(ref schema_ref) => parameter.schema.resolve_ref(schema_ref),
-                            None => parameter.schema.as_result(),
-                        }
+            maybe.resolve_ref_opt(&components.parameters).and_then(
+                |parameter| {
+                    parameter
+                        .schema
+                        .resolve_ref_opt(&components.schemas)
                         .and_then(NativeType::from_schema)
                         .map(|native_type| {
-                                 Arg::new(parameter.name.clone(), native_type, parameter.in_)
-                             })
-                })
+                            Arg::new(parameter.name.clone(), native_type, parameter.in_)
+                        })
+                },
+            )
         })
         .collect()
 }
@@ -109,8 +110,9 @@ pub struct Arg {
 
 #[derive(Debug, Default, Clone, new)]
 pub struct Response {
-    pub code: String,
-    pub type_: Option<NativeType>,
+    pub status_code: String,
+    pub return_type: Option<NativeType>,
+    pub content_type: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialOrd, Ord, PartialEq, Eq)]

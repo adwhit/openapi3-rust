@@ -66,6 +66,13 @@ impl<T> MaybeRef<T> {
             _ => bail!("MaybeRef not concrete"),
         }
     }
+
+    pub fn resolve_ref_opt<'a>(&'a self, maybe_map: &'a Option<MapMaybeRef<T>>) -> Result<&'a T> {
+        match *maybe_map {
+            Some(ref map) => self.resolve_ref(map),
+            None => self.as_result(),
+        }
+    }
 }
 
 /// The root struct representing an OpenAPI spec
