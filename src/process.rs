@@ -2,6 +2,8 @@ use {OpenApi, Result, Map, MaybeRef};
 use objects::*;
 use errors::ErrorKind;
 use regex::Regex;
+use serde_json::to_string as to_json_string;
+use schemafy;
 use std::collections::{BTreeSet, BTreeMap};
 
 #[derive(Debug, Clone, new)]
@@ -32,9 +34,10 @@ fn build_entrypoint(
             }
         })
         .collect();
-    let operation_id = operation.operation_id.as_ref().ok_or(ErrorKind::from(
-        "No operation_id found",
-    ))?;
+    let operation_id = operation
+        .operation_id
+        .as_ref()
+        .ok_or(ErrorKind::from("No operation_id found"))?;
     Ok(Entrypoint::new(
         route,
         method,
@@ -87,10 +90,9 @@ fn build_args(operation: &Operation, components: &Components) -> Result<Vec<Arg>
         .map(|maybe| {
             maybe.resolve_ref_opt(&components.parameters).and_then(
                 |parameter| {
-                    NativeType::from_json_schema(&parameter.schema, components)
-                        .map(|native_type| {
-                            Arg::new(parameter.name.clone(), native_type, parameter.in_)
-                        })
+                    NativeType::from_json_schema(&parameter.schema, components).map(|native_type| {
+                        Arg::new(parameter.name.clone(), native_type, parameter.in_)
+                    })
                 },
             )
         })
@@ -226,6 +228,14 @@ fn extract_route_args(route: &str) -> BTreeSet<String> {
         .collect()
 }
 
+impl Schema {
+    fn schemafy(&self) -> Result<String> {
+        let json = to_json_string(self)?;
+        println!("{}", json);
+        schemafy::generate(None, &json).map_err(|e| format!("Schemafy error: {}", e).into())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -241,10 +251,29 @@ mod tests {
 
     #[test]
     fn test_flatten() {
-        let file = File::open("test_apis/petstore.yaml").unwrap();
+        let file = File::open("test_specs/petstore.yaml").unwrap();
         let api = OpenApi::from_reader(file).unwrap();
         let flat = flatten(&api);
         println!("{:#?}", flat);
         assert_eq!(flat.len(), 3);
+    }
+
+    #[test]
+    fn test_simple_schemafy() {
+        let yaml = include_str!("../test_specs/simple.yaml");
+        let api = OpenApi::from_string(yaml).unwrap();
+        let schema: &Schema = api.components
+            .as_ref()
+            .unwrap()
+            .schemas
+            .as_ref()
+            .unwrap()
+            .iter()
+            .next()
+            .as_ref()
+            .map(|&(name, ref schema)| schema.as_result().unwrap())
+            .unwrap();
+        let function = schema.schemafy().unwrap();
+        println!("Hello function: {}", function);
     }
 }

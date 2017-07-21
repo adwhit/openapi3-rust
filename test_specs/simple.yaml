@@ -1,0 +1,19 @@
+openapi: "3.0.0"
+info:
+  title: simple
+  version: 1
+paths: {}
+components:
+  schemas:
+    Pet:
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        tag:
+          type: string

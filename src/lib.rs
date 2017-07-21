@@ -108,6 +108,10 @@ impl OpenApi {
         OpenApi::from_reader(file)
     }
 
+    pub fn from_string(s: &str) -> Result<OpenApi> {
+        OpenApi::from_reader(s.as_bytes())
+    }
+
     pub fn to_yaml<W: Write>(&self, writer: W) -> Result<()> {
         Ok(serde_yaml::to_writer(writer, &self)?)
     }
@@ -123,7 +127,6 @@ impl OpenApi {
     pub fn to_json_string(&self) -> Result<String> {
         Ok(serde_json::to_string(&self)?)
     }
-
 }
 
 #[cfg(test)]
@@ -132,39 +135,30 @@ mod tests {
 
     #[test]
     fn parse_petstore() {
-        let file = File::open("test_apis/petstore.yaml").unwrap();
-        let api: OpenApi = match OpenApi::from_reader(file) {
-            Ok(api) => api,
-            Err(e) => panic!("{}", e),
-        };
+        let s = include_str!("../test_specs/petstore.yaml");
+        let api = OpenApi::from_string(s).unwrap();
         println!("{:#?}", api)
     }
 
     #[test]
     fn parse_and_serialize_petstore() {
-        let file = File::open("test_apis/petstore.yaml").unwrap();
-        let api: OpenApi = OpenApi::from_reader(file).unwrap();
+        let s = include_str!("../test_specs/petstore.yaml");
+        let api = OpenApi::from_string(s).unwrap();
         let yaml = api.to_yaml_string().unwrap();
         println!("{}", yaml);
     }
 
     #[test]
     fn parse_petstore_expanded() {
-        let file = File::open("test_apis/petstore-expanded.yaml").unwrap();
-        let api = match OpenApi::from_reader(file) {
-            Ok(api) => api,
-            Err(e) => panic!("{}", e),
-        };
+        let s = include_str!("../test_specs/petstore-expanded.yaml");
+        let api = OpenApi::from_string(s).unwrap();
         println!("{:#?}", api)
     }
 
     #[test]
     fn parse_uber() {
-        let file = File::open("test_apis/uber.yaml").unwrap();
-        let api: OpenApi = match OpenApi::from_reader(file) {
-            Ok(api) => api,
-            Err(e) => panic!("{}", e),
-        };
+        let s = include_str!("../test_specs/uber.yaml");
+        let api = OpenApi::from_string(s).unwrap();
         println!("{:#?}", api)
     }
 }
