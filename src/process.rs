@@ -229,10 +229,9 @@ fn extract_route_args(route: &str) -> BTreeSet<String> {
 }
 
 impl Schema {
-    fn schemafy(&self) -> Result<String> {
+    fn schemafy(&self, name: &str) -> Result<String> {
         let json = to_json_string(self)?;
-        println!("{}", json);
-        schemafy::generate(None, &json).map_err(|e| format!("Schemafy error: {}", e).into())
+        schemafy::generate(Some(name), &json).map_err(|e| format!("Schemafy error: {}", e).into())
     }
 }
 
@@ -259,8 +258,18 @@ mod tests {
     }
 
     #[test]
+    fn test_atom_schemafy() {
+        let schema = Schema {
+            type_: Some(Type::Integer),
+            ..Default::default()
+        };
+        let outcome = schema.schemafy("my dummy type").unwrap();
+        assert!(outcome.contains("MyDummyType = i64"));
+    }
+
+    #[test]
     fn test_simple_schemafy() {
-        let yaml = include_str!("../test_specs/simple.yaml");
+        let yaml = include_str!("../test_specs/petstore.yaml");
         let api = OpenApi::from_string(yaml).unwrap();
         let schema: &Schema = api.components
             .as_ref()
@@ -268,12 +277,32 @@ mod tests {
             .schemas
             .as_ref()
             .unwrap()
-            .iter()
-            .next()
+            .get("Pet")
             .as_ref()
-            .map(|&(name, ref schema)| schema.as_result().unwrap())
-            .unwrap();
-        let function = schema.schemafy().unwrap();
-        println!("Hello function: {}", function);
+            .map(|schema| schema.as_result().unwrap())
+            .unwrap(); // yuck
+        let schema = schema.schemafy("Pet").unwrap();
+        assert!(schema.contains("pub struct Pet"));
+        assert!(schema.contains("pub id"));
+        assert!(schema.contains("pub name"));
+        assert!(schema.contains("pub tag"));
+    }
+
+    #[test]
+    fn test_referenced_schemafy() {
+        let yaml = include_str!("../test_specs/petstore.yaml");
+        let api = OpenApi::from_string(yaml).unwrap();
+        let schema: &Schema = api.components
+            .as_ref()
+            .unwrap()
+            .schemas
+            .as_ref()
+            .unwrap()
+            .get("Pets")
+            .as_ref()
+            .map(|schema| schema.as_result().unwrap())
+            .unwrap(); // yuck
+        let schema = schema.schemafy("Pets").unwrap();
+        assert!(schema.contains("pub type Pets = Vec<Pet>;"));
     }
 }

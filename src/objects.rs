@@ -203,7 +203,7 @@ pub struct MediaType {
     pub examples: Option<MapMaybeRef<Example>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, new)]
 #[serde(deny_unknown_fields)]
 pub struct Schema {
     #[serde(skip_serializing_if = "Option::is_none")]
