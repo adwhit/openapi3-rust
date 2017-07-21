@@ -65,7 +65,7 @@ fn build_responses(operation: &Operation, components: &Components) -> Vec<Result
                                 .schema
                                 .as_ref()
                                 .ok_or("Media schema not found".into())
-                                .and_then(|maybe| NativeType::from_json_schema(maybe, components))
+                                .and_then(|maybe| NativeType::from_json_schema(maybe))
                                 .map(|typ| {
                                     Response::new(
                                         code.clone(),
@@ -90,7 +90,7 @@ fn build_args(operation: &Operation, components: &Components) -> Result<Vec<Arg>
         .map(|maybe| {
             maybe.resolve_ref_opt(&components.parameters).and_then(
                 |parameter| {
-                    NativeType::from_json_schema(&parameter.schema, components).map(|native_type| {
+                    NativeType::from_json_schema(&parameter.schema).map(|native_type| {
                         Arg::new(parameter.name.clone(), native_type, parameter.in_)
                     })
                 },
@@ -129,55 +129,38 @@ pub enum NativeType {
     F32,
     F64,
     Bool,
-    Date,
-    DateTime,
     String,
-    Struct(Map<NativeType>),
-    Vec(Box<NativeType>),
     Option(Box<NativeType>),
+    Named(Option<String>),
 }
 
 impl NativeType {
-    fn from_format(format: Format) -> NativeType {
-        use Format::*;
-        match format {
-            Int32 => NativeType::I32,
-            Int64 => NativeType::I64,
-            Float => NativeType::F32,
-            Double => NativeType::F64,
-            Byte => NativeType::F64,
-            Date => NativeType::Date,
-            DateTime => NativeType::DateTime,
-            Binary => NativeType::String,
-            Password => NativeType::String,
-        }
-    }
-
-    fn from_json_schema(maybe_schema: &MaybeRef<Schema>, components: &Components) -> Result<Self> {
-        // let schema = maybe_schema.resolve_ref_opt(components.schema)?;
-        // if schema.properties.is_none() && schema.type_.is_none() {
-        //     bail!("No type specified")
-        // };
-        // let type_ = schema.type_.unwrap_or(Type::Object);
-        // if let Some(f) = schema.format {
-        //     if f.compatible_with_type(type_) {
-        //         bail!("Type {:?} and Format {:?} are not compatible")
-        //     }
-        // }
-        // match type_ {
-        //     Boolean => NativeType::Bool,
-        //     Number => NativeType::F64,
-        //     Integer => NativeType::I64,
-        //     String => NativeType::String,
-        //     Object => match schema.properties {
-        //         None => bail!("No properties for object definition"),
-        //         Some(props) => build_struct_from_properties(props, componenets)
-        //     }
-        //     Array => {
-        //         schema.items
-        //     }
-        // }
-        unimplemented!()
+    fn from_json_schema(maybe_schema: &MaybeRef<Schema>) -> Result<Self> {
+        use schemafy::schema::SimpleTypes::*;
+        let out = match *maybe_schema {
+            MaybeRef::Concrete(ref schema) => {
+                if schema.type_.len() != 1 {
+                    bail!("Schema type is array")
+                };
+                match schema.type_[0] {
+                    Array => NativeType::Named(None),
+                    Boolean => NativeType::Bool,
+                    Integer => NativeType::I64,
+                    Null => bail!("Null is not valid as per spec"),
+                    Number => NativeType::F64,
+                    Object => NativeType::Named(None),
+                    String => NativeType::String,
+                }
+            }
+            MaybeRef::Ref(ref r) => {
+                let name = match r.ref_.rfind("/") {
+                    None => bail!("Reference {} is not valid path", r.ref_),
+                    Some(loc) => r.ref_.split_at(loc + 1).0,
+                };
+                NativeType::Named(Some(name.into()))
+            }
+        };
+        Ok(out)
     }
 }
 
@@ -229,9 +212,8 @@ fn extract_route_args(route: &str) -> BTreeSet<String> {
 }
 
 fn schema_to_string(name: &str, schema: &Schema) -> Result<String> {
-    schemafy::generate(Some(name), &to_json_string(schema)?).map_err(|e| {
-        format!("Schemafy failed: {}", e).into()
-    })
+    schemafy::generate(Some(name), &to_json_string(schema)?)
+        .map_err(|e| format!("Schemafy failed: {}", e).into())
 }
 
 #[cfg(test)]

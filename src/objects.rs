@@ -240,6 +240,8 @@ pub struct Example {
     external_value: Option<String>,
 }
 
+// TODO implement these things properly
+
 pub type Callback = Map<Path>;
 pub type SecurityRequirement = YamlValue;
 pub type ExternalDocs = YamlValue;
@@ -254,51 +256,6 @@ pub enum Location {
     Query,
     Header,
     Cookie,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Type {
-    Boolean,
-    Object,
-    Array,
-    Number,
-    String,
-    Integer,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Format {
-    Int32,
-    Int64,
-    Float,
-    Double,
-    Byte,
-    Binary,
-    Date,
-    #[serde(rename = "date-time")]
-    DateTime,
-    Password,
-}
-
-impl Format {
-    pub fn compatible_with_type(self, type_: Type) -> bool {
-        use Type::*;
-        use Format::*;
-        match (type_, self) {
-            (Number, Float) |
-            (Number, Double) |
-            (Integer, Int32) |
-            (Integer, Int64) |
-            (String, Byte) |
-            (String, Binary) |
-            (String, Date) |
-            (String, DateTime) |
-            (String, Password) => true,
-            _ => false,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
