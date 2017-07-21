@@ -228,11 +228,10 @@ fn extract_route_args(route: &str) -> BTreeSet<String> {
         .collect()
 }
 
-impl Schema {
-    fn schemafy(&self, name: &str) -> Result<String> {
-        let json = to_json_string(self)?;
-        schemafy::generate(Some(name), &json).map_err(|e| format!("Schemafy error: {}", e).into())
-    }
+fn schema_to_string(name: &str, schema: &Schema) -> Result<String> {
+    schemafy::generate(Some(name), &to_json_string(schema)?).map_err(|e| {
+        format!("Schemafy failed: {}", e).into()
+    })
 }
 
 #[cfg(test)]
@@ -259,11 +258,9 @@ mod tests {
 
     #[test]
     fn test_atom_schemafy() {
-        let schema = Schema {
-            type_: Some(Type::Integer),
-            ..Default::default()
-        };
-        let outcome = schema.schemafy("my dummy type").unwrap();
+        let schema = r#"{"type": "integer"}"#;
+        let outcome = schemafy::generate(Some("my dummy type"), schema).unwrap();
+        println!("{}", outcome);
         assert!(outcome.contains("MyDummyType = i64"));
     }
 
@@ -281,7 +278,7 @@ mod tests {
             .as_ref()
             .map(|schema| schema.as_result().unwrap())
             .unwrap(); // yuck
-        let schema = schema.schemafy("Pet").unwrap();
+        let schema = schema_to_string("Pet", schema).unwrap();
         assert!(schema.contains("pub struct Pet"));
         assert!(schema.contains("pub id"));
         assert!(schema.contains("pub name"));
@@ -302,7 +299,7 @@ mod tests {
             .as_ref()
             .map(|schema| schema.as_result().unwrap())
             .unwrap(); // yuck
-        let schema = schema.schemafy("Pets").unwrap();
+        let schema = schema_to_string("Pets", schema).unwrap();
         assert!(schema.contains("pub type Pets = Vec<Pet>;"));
     }
 }

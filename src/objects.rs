@@ -1,4 +1,5 @@
 pub use serde_yaml::Value as YamlValue;
+pub use schemafy::schema::Schema;
 use {MaybeRef, Map, MapMaybeRef};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -201,22 +202,6 @@ pub struct MediaType {
     pub example: Option<YamlValue>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub examples: Option<MapMaybeRef<Example>>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default, new)]
-#[serde(deny_unknown_fields)]
-pub struct Schema {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub required: Option<Vec<String>>,
-    #[serde(rename = "type")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub type_: Option<Type>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub format: Option<Format>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub properties: Option<Map<Box<MaybeRef<Schema>>>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub items: Option<Box<MaybeRef<Schema>>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
