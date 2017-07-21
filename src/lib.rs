@@ -4,6 +4,8 @@ extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 extern crate serde_yaml;
+extern crate serde_json;
+extern crate schemafy;
 extern crate regex;
 #[macro_use]
 extern crate derive_new;

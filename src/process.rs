@@ -1,4 +1,4 @@
-use {OpenApi, Result};
+use {OpenApi, Result, Map, MaybeRef};
 use objects::*;
 use errors::ErrorKind;
 use regex::Regex;
@@ -62,8 +62,7 @@ fn build_responses(operation: &Operation, components: &Components) -> Vec<Result
                                 .schema
                                 .as_ref()
                                 .ok_or("Media schema not found".into())
-                                .and_then(|maybe| maybe.resolve_ref_opt(&components.schemas))
-                                .and_then(NativeType::from_schema)
+                                .and_then(|maybe| NativeType::from_json_schema(maybe, components))
                                 .map(|typ| {
                                     Response::new(
                                         code.clone(),
@@ -88,10 +87,7 @@ fn build_args(operation: &Operation, components: &Components) -> Result<Vec<Arg>
         .map(|maybe| {
             maybe.resolve_ref_opt(&components.parameters).and_then(
                 |parameter| {
-                    parameter
-                        .schema
-                        .resolve_ref_opt(&components.schemas)
-                        .and_then(NativeType::from_schema)
+                    NativeType::from_json_schema(&parameter.schema, components)
                         .map(|native_type| {
                             Arg::new(parameter.name.clone(), native_type, parameter.in_)
                         })
@@ -124,7 +120,7 @@ pub enum Method {
     Delete,
 }
 
-#[derive(Clone, Copy, Debug, PartialOrd, Ord, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq)]
 pub enum NativeType {
     I32,
     I64,
@@ -134,27 +130,13 @@ pub enum NativeType {
     Date,
     DateTime,
     String,
-    // Struct(Map<NativeType>),
-    // Vec(Box<NativeType>),
-    // Option(Box<NativeType>),
-    Struct,
-    Vec,
+    Struct(Map<NativeType>),
+    Vec(Box<NativeType>),
+    Option(Box<NativeType>),
 }
 
 impl NativeType {
-    fn from_openapi_type(type_: Type) -> NativeType {
-        use Type::*;
-        match type_ {
-            Boolean => NativeType::Bool,
-            Object => NativeType::Struct,
-            Array => NativeType::Vec,
-            Number => NativeType::F64,
-            Integer => NativeType::I64,
-            String => NativeType::String,
-        }
-    }
-
-    fn from_openapi_format(format: Format) -> NativeType {
+    fn from_format(format: Format) -> NativeType {
         use Format::*;
         match format {
             Int32 => NativeType::I32,
@@ -169,17 +151,31 @@ impl NativeType {
         }
     }
 
-    fn from_openapi_type_or_format(type_: &Option<Type>, format: &Option<Format>) -> Result<Self> {
-        // TODO check type and format agree
-        match (*type_, *format) {
-            (None, _) => bail!("No type specified"),
-            (Some(atype), None) => Ok(Self::from_openapi_type(atype)),
-            (Some(_), Some(aformat)) => Ok(Self::from_openapi_format(aformat)),
-        }
-    }
-
-    fn from_schema(schema: &Schema) -> Result<Self> {
-        NativeType::from_openapi_type_or_format(&schema.type_, &schema.format)
+    fn from_json_schema(maybe_schema: &MaybeRef<Schema>, components: &Components) -> Result<Self> {
+        // let schema = maybe_schema.resolve_ref_opt(components.schema)?;
+        // if schema.properties.is_none() && schema.type_.is_none() {
+        //     bail!("No type specified")
+        // };
+        // let type_ = schema.type_.unwrap_or(Type::Object);
+        // if let Some(f) = schema.format {
+        //     if f.compatible_with_type(type_) {
+        //         bail!("Type {:?} and Format {:?} are not compatible")
+        //     }
+        // }
+        // match type_ {
+        //     Boolean => NativeType::Bool,
+        //     Number => NativeType::F64,
+        //     Integer => NativeType::I64,
+        //     String => NativeType::String,
+        //     Object => match schema.properties {
+        //         None => bail!("No properties for object definition"),
+        //         Some(props) => build_struct_from_properties(props, componenets)
+        //     }
+        //     Array => {
+        //         schema.items
+        //     }
+        // }
+        unimplemented!()
     }
 }
 

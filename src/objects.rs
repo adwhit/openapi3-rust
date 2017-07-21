@@ -232,6 +232,25 @@ pub enum Format {
     Password,
 }
 
+impl Format {
+    pub fn compatible_with_type(self, type_: Type) -> bool {
+        use Type::*;
+        use Format::*;
+        match (type_, self) {
+            (Number, Float) |
+            (Number, Double) |
+            (Integer, Int32) |
+            (Integer, Int64) |
+            (String, Byte) |
+            (String, Binary) |
+            (String, Date) |
+            (String, DateTime) |
+            (String, Password) => true,
+            _ => false,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Style {
