@@ -7,8 +7,6 @@ extern crate serde_yaml;
 extern crate serde_json;
 extern crate schemafy;
 extern crate regex;
-#[macro_use]
-extern crate derive_new;
 
 use std::fs::File;
 use std::io::{Read, Write};
@@ -16,10 +14,8 @@ use std::collections::BTreeMap;
 
 pub use errors::*;
 use objects::*;
-pub use process::Entrypoint;
 
 pub mod objects;
-pub mod process;
 
 mod errors {
     error_chain!{
@@ -129,9 +125,12 @@ impl OpenApi {
     }
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // TODO: Test serialization
 
     #[test]
     fn parse_petstore() {
