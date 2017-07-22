@@ -12,8 +12,8 @@ use std::fs::File;
 use std::io::{Read, Write};
 use std::collections::BTreeMap;
 
-pub use errors::*;
 use objects::*;
+pub use errors::*;
 
 pub mod objects;
 

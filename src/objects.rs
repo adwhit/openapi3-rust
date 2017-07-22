@@ -1,6 +1,21 @@
 pub use serde_yaml::Value as YamlValue;
-pub use schemafy::schema::Schema;
+pub use schemafy::schema::{Schema, SimpleTypes};
+use schemafy;
+use serde_json;
+use Result;
 use {MaybeRef, Map, MapMaybeRef};
+
+pub trait CodeGen {
+    fn generate_code(&self, name: &str) -> Result<String>;
+}
+
+impl CodeGen for Schema {
+    fn generate_code(&self, name: &str) -> Result<String> {
+        let json_schema = serde_json::to_string(self)?;
+        schemafy::generate(Some(name), &json_schema)
+            .map_err(|e| format!("Codegen error: {}", e).into())
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
