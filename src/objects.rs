@@ -171,7 +171,7 @@ pub struct Parameter {
     #[serde(rename = "allowReserved")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub allow_reserved: Option<bool>,
-    pub schema: MaybeRef<Schema>,
+    pub schema: Schema,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub example: Option<YamlValue>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -197,7 +197,7 @@ pub struct ResponseObj {
 #[serde(deny_unknown_fields)]
 pub struct MediaType {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub schema: Option<MaybeRef<Schema>>,
+    pub schema: Option<Schema>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub example: Option<YamlValue>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -207,7 +207,7 @@ pub struct MediaType {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Components {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub schemas: Option<MapMaybeRef<Schema>>,
+    pub schemas: Option<Map<Schema>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub responses: Option<MapMaybeRef<ResponseObj>>,
     #[serde(skip_serializing_if = "Option::is_none")]

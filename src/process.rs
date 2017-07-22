@@ -15,12 +15,28 @@ pub struct Entrypoint {
     pub operation_id: String,
 }
 
+pub fn extract_entrypoints(spec: &OpenApi) -> Vec<Entrypoint> {
+    let mut out = Vec::new();
+    let mut components = &Default::default();
+    components = spec.components.as_ref().unwrap_or(components);
+    for (route, path) in &spec.paths {
+        for (method, op) in path.as_map() {
+            match build_entrypoint(route.clone(), method, op, components) {
+                Ok(entrypoint) => out.push(entrypoint),
+                Err(e) => eprintln!("{}", e),
+            }
+        }
+    }
+    out
+}
+
 fn build_entrypoint(
     route: String,
     method: Method,
     operation: &Operation,
     components: &Components,
 ) -> Result<Entrypoint> {
+    // TODO verify route args
     let route_args = extract_route_args(&route);
     let args = build_args(operation, components)?;
     let responses = build_responses(operation, components);
@@ -47,37 +63,11 @@ fn build_entrypoint(
     ))
 }
 
-fn build_responses(operation: &Operation, components: &Components) -> Vec<Result<Response>> {
-    operation
-        .responses
-        .iter()
-        .map(|(code, maybe)| {
-            let response_obj = maybe.resolve_ref_opt(&components.responses)?;
-            match response_obj.content {
-                None => return Ok(Response::new(code.clone(), None, None)), // No data returned
-                Some(ref content_map) => {
-                    content_map
-                        .iter()
-                        .next()
-                        .ok_or("Content map empty".into())
-                        .and_then(|(content_type, media)| {
-                            media
-                                .schema
-                                .as_ref()
-                                .ok_or("Media schema not found".into())
-                                .and_then(|maybe| NativeType::from_json_schema(maybe))
-                                .map(|typ| {
-                                    Response::new(
-                                        code.clone(),
-                                        Some(typ),
-                                        Some(content_type.clone()),
-                                    )
-                                })
-                        })
-                }
-            }
-        })
-        .collect()
+#[derive(Debug, Clone, new)]
+pub struct Arg {
+    pub name: String,
+    pub type_: NativeType,
+    pub location: Location,
 }
 
 fn build_args(operation: &Operation, components: &Components) -> Result<Vec<Arg>> {
@@ -90,7 +80,8 @@ fn build_args(operation: &Operation, components: &Components) -> Result<Vec<Arg>
         .map(|maybe| {
             maybe.resolve_ref_opt(&components.parameters).and_then(
                 |parameter| {
-                    NativeType::from_json_schema(&parameter.schema).map(|native_type| {
+                    let required = parameter.required.unwrap_or(false);
+                    NativeType::from_json_schema(&parameter.schema, required).map(|native_type| {
                         Arg::new(parameter.name.clone(), native_type, parameter.in_)
                     })
                 },
@@ -99,18 +90,54 @@ fn build_args(operation: &Operation, components: &Components) -> Result<Vec<Arg>
         .collect()
 }
 
-#[derive(Debug, Clone, new)]
-pub struct Arg {
-    pub name: String,
-    pub type_: NativeType,
-    pub location: Location,
-}
-
 #[derive(Debug, Default, Clone, new)]
 pub struct Response {
     pub status_code: String,
     pub return_type: Option<NativeType>,
     pub content_type: Option<String>,
+}
+
+impl Response {
+    fn build_from_response_obj(
+        status_code: String,
+        response_obj: &ResponseObj,
+    ) -> Result<Response> {
+        match response_obj.content {
+            None => return Ok(Response::new(status_code, None, None)), // No data returned
+            Some(ref content_map) => {
+                content_map
+                    .iter()
+                    .next()
+                    .ok_or("Content map empty".into())
+                    .and_then(|(content_type, media)| {
+                        media
+                                .schema
+                                .as_ref()
+                                .ok_or("Media schema not found".into())
+                                // For responses, the default required state is 'true'
+                                .and_then(|maybe| NativeType::from_json_schema(maybe, true))
+                                .map(|typ| {
+                                    Response::new(
+                                        status_code,
+                                        Some(typ),
+                                        Some(content_type.clone()),
+                                    )
+                                })
+                    })
+            }
+        }
+    }
+}
+
+fn build_responses(operation: &Operation, components: &Components) -> Vec<Result<Response>> {
+    operation
+        .responses
+        .iter()
+        .map(|(code, maybe)| {
+            let response_obj = maybe.resolve_ref_opt(&components.responses)?;
+            Response::build_from_response_obj(code.clone(), response_obj)
+        })
+        .collect()
 }
 
 #[derive(Clone, Copy, Debug, PartialOrd, Ord, PartialEq, Eq)]
@@ -122,7 +149,7 @@ pub enum Method {
     Delete,
 }
 
-#[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum NativeType {
     I32,
     I64,
@@ -130,37 +157,58 @@ pub enum NativeType {
     F64,
     Bool,
     String,
+    Named(String),
+    Array(Vec<NativeType>),
     Option(Box<NativeType>),
-    Named(Option<String>),
+    Anonymous(Box<Schema>),
 }
 
 impl NativeType {
-    fn from_json_schema(maybe_schema: &MaybeRef<Schema>) -> Result<Self> {
-        use schemafy::schema::SimpleTypes::*;
-        let out = match *maybe_schema {
-            MaybeRef::Concrete(ref schema) => {
-                if schema.type_.len() != 1 {
-                    bail!("Schema type is array")
-                };
-                match schema.type_[0] {
-                    Array => NativeType::Named(None),
-                    Boolean => NativeType::Bool,
-                    Integer => NativeType::I64,
-                    Null => bail!("Null is not valid as per spec"),
-                    Number => NativeType::F64,
-                    Object => NativeType::Named(None),
-                    String => NativeType::String,
+    fn from_json_schema(schema: &Schema, required: bool) -> Result<Self> {
+        let out = if let Some(ref ref_) = schema.ref_ {
+            // If the schema is a reference, grab the name
+            match ref_.rfind("/") {
+                None => bail!("Reference {} is not valid path", ref_),
+                Some(loc) => {
+                    let refname = ref_.split_at(loc + 1).1;
+                    NativeType::Named(refname.into())
                 }
             }
-            MaybeRef::Ref(ref r) => {
-                let name = match r.ref_.rfind("/") {
-                    None => bail!("Reference {} is not valid path", r.ref_),
-                    Some(loc) => r.ref_.split_at(loc + 1).0,
-                };
-                NativeType::Named(Some(name.into()))
+        } else {
+            match schema.type_.len() {
+                0 => NativeType::Anonymous(Box::new(schema.clone())), // assume it is an object
+                1 => {
+                    // If the type is a primitive, pluck it from the schema
+                    // Otherwise, return the schema
+                    use schemafy::schema::SimpleTypes::*;
+                    match *(schema.type_.first().unwrap()) {
+                        Object => NativeType::Anonymous(Box::new(schema.clone())),
+                        Boolean => NativeType::Bool,
+                        Integer => NativeType::I64,
+                        Null => bail!("Null is not valid as per spec"),
+                        Number => NativeType::F64,
+                        String => NativeType::String,
+                        Array => {
+                            if schema.items.len() == 0 {
+                                bail!("Items missing for array schema")
+                            }
+                            let natives = schema
+                                .items
+                                .iter()
+                                .map(|schema| NativeType::from_json_schema(schema, required))
+                                .collect::<Result<Vec<_>>>()?;
+                            NativeType::Array(natives)
+                        }
+                    }
+                }
+                other => bail!("Schema type is array of len {}", other),
             }
         };
-        Ok(out)
+        if !required {
+            Ok(NativeType::Option(Box::new(out)))
+        } else {
+            Ok(out)
+        }
     }
 }
 
@@ -187,21 +235,6 @@ impl Path {
     }
 }
 
-pub fn flatten(spec: &OpenApi) -> Vec<Entrypoint> {
-    let mut out = Vec::new();
-    let mut components = &Default::default();
-    components = spec.components.as_ref().unwrap_or(components);
-    for (route, path) in &spec.paths {
-        for (method, op) in path.as_map() {
-            match build_entrypoint(route.clone(), method, op, components) {
-                Ok(entrypoint) => out.push(entrypoint),
-                Err(e) => eprintln!("{}", e),
-            }
-        }
-    }
-    out
-}
-
 fn extract_route_args(route: &str) -> BTreeSet<String> {
     let re = Regex::new(r"^\{(.+)\}$").unwrap();
     route
@@ -211,7 +244,7 @@ fn extract_route_args(route: &str) -> BTreeSet<String> {
         .collect()
 }
 
-fn schema_to_string(name: &str, schema: &Schema) -> Result<String> {
+pub fn schema_to_code(name: &str, schema: &Schema) -> Result<String> {
     schemafy::generate(Some(name), &to_json_string(schema)?)
         .map_err(|e| format!("Schemafy failed: {}", e).into())
 }
@@ -219,7 +252,7 @@ fn schema_to_string(name: &str, schema: &Schema) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs::File;
+    use serde_json;
 
     #[test]
     fn test_extract_route_args() {
@@ -230,10 +263,10 @@ mod tests {
     }
 
     #[test]
-    fn test_flatten() {
-        let file = File::open("test_specs/petstore.yaml").unwrap();
-        let api = OpenApi::from_reader(file).unwrap();
-        let flat = flatten(&api);
+    fn test_extract_entrypoints() {
+        let yaml = include_str!("../test_specs/petstore.yaml");
+        let api = OpenApi::from_string(yaml).unwrap();
+        let flat = extract_entrypoints(&api);
         println!("{:#?}", flat);
         assert_eq!(flat.len(), 3);
     }
@@ -257,14 +290,19 @@ mod tests {
             .as_ref()
             .unwrap()
             .get("Pet")
-            .as_ref()
-            .map(|schema| schema.as_result().unwrap())
             .unwrap(); // yuck
-        let schema = schema_to_string("Pet", schema).unwrap();
-        assert!(schema.contains("pub struct Pet"));
-        assert!(schema.contains("pub id"));
-        assert!(schema.contains("pub name"));
-        assert!(schema.contains("pub tag"));
+        let native = NativeType::from_json_schema(&schema, true).unwrap();
+        // TODO: this would be easier if Schema had a default impl
+        let expectstr = r#"{
+            "required": [ "id", "name" ],
+            "properties": {
+                "id": { "type": "integer", "format": "int64" },
+                "name": { "type": "string" },
+                "tag": { "type": "string" }
+            }
+        }"#;
+        let expect_schema: Schema = serde_json::from_str(expectstr).unwrap();
+        assert_eq!(native, NativeType::Anonymous(Box::new(expect_schema)));
     }
 
     #[test]
@@ -278,10 +316,9 @@ mod tests {
             .as_ref()
             .unwrap()
             .get("Pets")
-            .as_ref()
-            .map(|schema| schema.as_result().unwrap())
             .unwrap(); // yuck
-        let schema = schema_to_string("Pets", schema).unwrap();
-        assert!(schema.contains("pub type Pets = Vec<Pet>;"));
+        let native = NativeType::from_json_schema(&schema, true).unwrap();
+        let expect = NativeType::Array(vec![NativeType::Named("Pet".into())]);
+        assert_eq!(native, expect);
     }
 }
