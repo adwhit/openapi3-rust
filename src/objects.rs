@@ -264,7 +264,7 @@ pub type Header = YamlValue;
 pub type Link = YamlValue;
 pub type SecurityScheme = YamlValue;
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum Location {
     Path,
@@ -273,7 +273,7 @@ pub enum Location {
     Cookie,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum Style {
     Form,

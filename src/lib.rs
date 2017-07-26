@@ -13,6 +13,7 @@ use std::io::{Read, Write};
 use std::collections::BTreeMap;
 
 use objects::*;
+pub use objects::Schema;
 pub use errors::*;
 
 pub mod objects;
